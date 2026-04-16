@@ -22,4 +22,7 @@ router.get('/productivity/weekly', authorize('company_admin'), companyController
 // File import endpoint
 router.post('/people/import', authorize('company_admin'), companyController.importPeople);
 
+// Performance summary (all managers + employees with scores)
+router.get('/performance-summary', authorize('company_admin'), companyController.getPerformanceSummary);
+
 module.exports = router;

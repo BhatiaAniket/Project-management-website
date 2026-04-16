@@ -2,40 +2,37 @@ const express = require('express');
 const router = express.Router();
 const employeeController = require('../controllers/employeeController');
 const { protect, authorize } = require('../middleware/auth');
-const verifyOwnership = require('../middleware/verifyOwnership');
 
-// Restrict all routes to employees
+// All routes require employee authentication
 router.use(protect);
 router.use(authorize('employee'));
 
-// Ensure company context
-router.use((req, res, next) => {
-  req.companyId = req.user.company;
-  next();
-});
-
-// Overview
+// ── Overview ──────────────────────────────────────────────────────────────────
 router.get('/overview/stats', employeeController.getOverviewStats);
 router.get('/overview/deadlines', employeeController.getUpcomingDeadlines);
 router.get('/overview/meetings', employeeController.getUpcomingMeetings);
 
-// Tasks
+// ── Tasks ─────────────────────────────────────────────────────────────────────
 router.get('/tasks', employeeController.getTasks);
-router.patch('/tasks/:id/status', verifyOwnership('Task', 'assignedTo'), employeeController.updateTaskStatus);
+router.patch('/tasks/:id/status', employeeController.updateTaskStatus);
 
-// Daily Reports
+// ── Daily Reports ─────────────────────────────────────────────────────────────
 router.get('/reports', employeeController.getDailyReports);
 router.post('/reports', employeeController.submitDailyReport);
+// Aliases
+router.get('/daily-reports', employeeController.getDailyReports);
+router.post('/daily-report', employeeController.submitDailyReport);
 
-// Meetings
+// ── Meetings ──────────────────────────────────────────────────────────────────
 router.get('/meetings', employeeController.getMeetings);
 router.post('/meetings/request', employeeController.requestMeeting);
 router.get('/meetings/requests', employeeController.getMeetingRequests);
 
-// Colleagues (for drop downs)
+// ── Colleagues ────────────────────────────────────────────────────────────────
 router.get('/colleagues', employeeController.getColleagues);
 
-// Performance
+// ── Performance ───────────────────────────────────────────────────────────────
 router.get('/performance', employeeController.getPerformance);
+router.get('/performance/ai-report', employeeController.getPerformanceAIReport);
 
 module.exports = router;

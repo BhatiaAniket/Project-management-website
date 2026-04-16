@@ -126,6 +126,11 @@ const taskSchema = new mongoose.Schema(
         ref: 'User',
       }],
     }],
+    // Tracks how many times this task was reassigned to a different employee
+    reassignmentCount: {
+      type: Number,
+      default: 0,
+    },
     // GitHub integration
     linkedRepo: {
       name: String,

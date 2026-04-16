@@ -71,6 +71,7 @@ export const companyAPI = {
   updateTask: (projectId: string, taskId: string, data: any) => api.put(`/projects/${projectId}/tasks/${taskId}`, data),
   deleteTask: (projectId: string, taskId: string) => api.delete(`/projects/${projectId}/tasks/${taskId}`),
   listAllTasks: (params?: any) => api.get('/projects/tasks/all', { params }),
+  assignProject: (projectId: string, managerId: string) => api.patch(`/projects/${projectId}/assign`, { managerId }),
 
   // Performance
   listPerformance: (params?: any) => api.get('/performance', { params }),

@@ -4,7 +4,6 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
 });
 
-// Add a request interceptor to include the auth token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token && config.headers) {
@@ -14,48 +13,61 @@ api.interceptors.request.use((config) => {
 });
 
 export const managerAPI = {
-  // Overview & Dashboard
-  getOverviewStats: () => api.get('/manager/overview/stats'),
-  getProjectTrajectory: () => api.get('/manager/overview/trajectory'),
-  getTaskHealth: () => api.get('/manager/overview/task-health'),
+  // ── Overview & Dashboard ──────────────────────────────────────────────────
+  getOverviewStats: () => api.get('/manager/overview-stats'),
+  getProjectsProgress: () => api.get('/manager/projects/progress'),
+  getTasksStatusSummary: () => api.get('/manager/tasks/status-summary'),
   getRecentActivity: () => api.get('/manager/overview/activity'),
 
-  // Project Management
-  getProjects: () => api.get('/manager/projects'),
-  getProjectDetails: (id: string) => api.get(`/manager/projects/${id}`),
+  // ── Projects ──────────────────────────────────────────────────────────────
+  getProjects: (params?: any) => api.get('/projects', { params }),
+  getProjectDetails: (id: string) => api.get(`/projects/${id}`),
   updateProject: (id: string, data: any) => api.patch(`/manager/projects/${id}`, data),
 
-  // Task & Operational Management
+  // ── Tasks ─────────────────────────────────────────────────────────────────
   getTasks: (projectId?: string) => api.get('/manager/tasks', { params: { projectId } }),
-  updateTaskStatus: (id: string, status: string) => api.patch(`/manager/tasks/${id}/status`, { status }),
-  updateTask: (id: string, data: any) => api.patch(`/manager/tasks/${id}`, data),
   createTask: (data: any) => api.post('/manager/tasks', data),
+  updateTask: (id: string, data: any) => api.patch(`/manager/tasks/${id}`, data),
+  updateTaskStatus: (id: string, status: string) => api.patch(`/manager/tasks/${id}/status`, { status }),
+  reviewTask: (id: string, data: any) => api.patch(`/manager/tasks/${id}/review`, data),
+  // Unassigned tasks
+  getUnassignedTasks: () => api.get('/manager/tasks/unassigned'),
+  assignTask: (id: string, employeeId: string) => api.patch(`/manager/tasks/${id}/assign`, { employeeId }),
 
-  // Personnel / Employee Management
+  // ── Employees ─────────────────────────────────────────────────────────────
   getEmployees: () => api.get('/manager/employees'),
-  getEmployeePerformance: (id: string) => api.get(`/manager/employees/${id}/performance`),
+  // Rate an employee (with taskId for proper ManagerRating model)
+  rateEmployee: (employeeId: string, rating: number, taskId?: string, comment?: string, category?: string) =>
+    taskId
+      ? api.post('/manager/rate-employee', { employeeId, taskId, rating, comment, category })
+      : api.patch(`/manager/employees/${employeeId}/rate`, { rating }),
 
-  // Intelligence Review (Daily Reports)
+  // ── Performance ───────────────────────────────────────────────────────────
+  getPerformanceTeam: () => api.get('/manager/performance/team'),
+  getPerformanceMe: (_userId?: string) => api.get('/manager/performance/me'),
+  getEmployeePerformanceDetail: (id: string) => api.get(`/manager/performance/employee/${id}`),
+  getManagerAIReport: () => api.get('/manager/performance/ai-report'),
+  // Legacy aliases
+  getPerformanceMetrics: () => api.get('/manager/performance/team'),
+  getTeamVelocity: () => api.get('/manager/performance/me'),
+  getEmployeePerformance: (id: string) => api.get(`/manager/performance/employee/${id}`),
+
+  // ── Daily Reports ─────────────────────────────────────────────────────────
   getReports: () => api.get('/manager/reports'),
+  getDailyReports: () => api.get('/manager/daily-reports'),
   updateReportStatus: (id: string, data: any) => api.patch(`/manager/reports/${id}/status`, data),
+  reviewDailyReport: (id: string, data: any) => api.patch(`/manager/daily-reports/${id}/review`, data),
 
-  // Intelligence & Analytics
-  getPerformanceMetrics: () => api.get('/manager/performance/metrics'),
-  getTeamVelocity: () => api.get('/manager/performance/velocity'),
-
-  // Briefing Center (Meetings)
+  // ── Meetings ──────────────────────────────────────────────────────────────
   getMeetings: () => api.get('/manager/meetings'),
-  handleMeetingRequest: (id: string, data: any) => api.patch(`/manager/meetings/requests/${id}/handle`, data),
   getMeetingRequests: () => api.get('/manager/meetings/requests'),
+  handleMeetingRequest: (id: string, data: any) => api.post('/manager/meetings/handle-request', data),
 
-  // Assets & Infrastructure
-  getFiles: (projectId?: string) => api.get('/manager/files', { params: { projectId } }),
-  uploadFile: (formData: FormData) => api.post('/manager/files/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
+  // ── Files ─────────────────────────────────────────────────────────────────
+  getFiles: (projectId?: string) => api.get('/files', { params: { projectId } }),
 
-  // Communication
-  getConversations: () => api.get('/manager/chat/conversations'),
-  getMessages: (conversationId: string) => api.get(`/manager/chat/messages/${conversationId}`),
-  sendMessage: (data: any) => api.post('/manager/chat/messages', data),
+  // ── Chat ──────────────────────────────────────────────────────────────────
+  getConversations: () => api.get('/chat/conversations'),
+  getMessages: (conversationId: string) => api.get(`/chat/conversations/${conversationId}/messages`),
+  sendMessage: (conversationId: string, data: any) => api.post(`/chat/conversations/${conversationId}/messages`, data),
 };

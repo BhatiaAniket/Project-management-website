@@ -6,6 +6,7 @@ import {
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useAuth } from '../../context/AuthContext';
+import { managerAPI } from '../../api/manager';
 import { companyAPI } from '../../api/company';
 import { showToast } from '../../components/Toast';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -22,10 +23,13 @@ export default function ManagerPerformance() {
   const [myStats, setMyStats] = useState<any>(null);
   const [loadingMine, setLoadingMine] = useState(true);
 
-  // Rating states
   const [ratingLoading, setRatingLoading] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const reportRef = React.useRef<HTMLDivElement>(null);
+
+  // AI Report state
+  const [aiReport, setAiReport] = useState<any>(null);
+  const [loadingAi, setLoadingAi] = useState(true);
 
   useEffect(() => {
     if (activeTab === 'employees') {
@@ -38,40 +42,55 @@ export default function ManagerPerformance() {
   const fetchEmployees = async () => {
     setLoadingEmployees(true);
     try {
-      const res = await companyAPI.listPerformance({ role: 'employee' });
-      // Enhance with metadata parsing if necessary
-      const fetched = res.data.data.performance || [];
-      // To get actual metadata like managerRating, we might need listPeople
-      const peopleRes = await companyAPI.listPeople({ role: 'employee' });
-      const peopleMap = new Map(peopleRes.data.data.people.map((p: any) => [p._id, p]));
+      // Use manager-specific performance endpoint (returns all company employees)
+      const res = await managerAPI.getPerformanceTeam();
+      const fetched = res.data.data?.performance || [];
 
-      const enriched = fetched.map((emp: any) => ({
-        ...emp,
-        metadata: peopleMap.get(emp._id)?.metadata || {}
-      }));
-      setEmployees(enriched);
-    } catch { setEmployees([]); }
-    finally { setLoadingEmployees(false); }
+      // Enrich with metadata (manager rating stored in User.metadata)
+      try {
+        const peopleRes = await companyAPI.listPeople({ role: 'employee' });
+        const peopleMap = new Map(peopleRes.data.data.people.map((p: any) => [p._id, p]));
+        const enriched = fetched.map((emp: any) => ({
+          ...emp,
+          metadata: peopleMap.get(emp._id)?.metadata || {}
+        }));
+        setEmployees(enriched);
+      } catch {
+        setEmployees(fetched);
+      }
+    } catch {
+      setEmployees([]);
+      showToast('Failed to load team performance', 'error');
+    } finally {
+      setLoadingEmployees(false);
+    }
   };
 
   const fetchMyPerformance = async () => {
     if (!user?._id) return;
     setLoadingMine(true);
+    setLoadingAi(true);
     try {
-      const res = await companyAPI.getIndividualPerformance(user._id);
+      const [res, aiRes] = await Promise.all([
+        managerAPI.getPerformanceMe(),
+        managerAPI.getManagerAIReport().catch(() => ({ data: { data: { report: 'AI summary currently unavailable.' } } }))
+      ]);
       setMyStats(res.data.data);
-    } catch { setMyStats(null); }
-    finally { setLoadingMine(false); }
+      setAiReport(aiRes.data?.data?.report || 'AI summary currently unavailable.');
+    } catch {
+      setMyStats(null);
+      showToast('Failed to load your performance data', 'error');
+    } finally {
+      setLoadingMine(false);
+      setLoadingAi(false);
+    }
   };
 
   const submitRating = async (empId: string, rating: number, currentMetadata: any) => {
     setRatingLoading(empId);
     try {
-      await companyAPI.updatePerson(empId, {
-        metadata: { ...currentMetadata, managerRating: rating }
-      });
-      // Optionally notify admin here via socket broadcast mechanism if needed
-      showToast('Performance rating submitted to Company Admin', 'success');
+      await managerAPI.rateEmployee(empId, rating);
+      showToast('Performance rating submitted', 'success');
       setEmployees(prev => prev.map(emp => {
         if (emp._id === empId) {
           return { ...emp, metadata: { ...emp.metadata, managerRating: rating } };
@@ -136,7 +155,7 @@ export default function ManagerPerformance() {
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground bg-muted p-4 rounded-xl border border-border inline-flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-blue-500" />
-                Showing metrics for employees assigned to your active projects.
+                Showing metrics for all employees in your company.
               </p>
               <button
                 onClick={exportTeamReport}
@@ -155,7 +174,7 @@ export default function ManagerPerformance() {
                 <div className="text-center py-12 bg-card border border-border rounded-2xl">
                   <BarChart3 className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold">No employees found</h3>
-                  <p className="text-sm text-muted-foreground">You do not have any employees assigned to your projects right now.</p>
+                  <p className="text-sm text-muted-foreground">There are no employees in your company yet.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -167,17 +186,23 @@ export default function ManagerPerformance() {
                             <img src={emp.avatar} alt="Avatar" className="w-12 h-12 rounded-full object-cover" />
                           ) : (
                             <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold shrink-0">
-                              {emp.fullName.charAt(0)}
+                              {emp.fullName?.charAt(0)}
                             </div>
                           )}
                           <div>
                             <h3 className="font-semibold">{emp.fullName}</h3>
-                            <p className="text-xs text-muted-foreground">{emp.role.replace('_', ' ')}</p>
+                            <p className="text-xs text-muted-foreground">{emp.role?.replace('_', ' ')}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 bg-orange-500/10 text-orange-500 px-3 py-1 rounded-full">
+                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold ${
+                          (emp.score ?? emp.productivityScore ?? 0) >= 800 ? 'bg-green-500/10 text-green-600' :
+                          (emp.score ?? emp.productivityScore ?? 0) >= 600 ? 'bg-blue-500/10 text-blue-600' :
+                          (emp.score ?? emp.productivityScore ?? 0) >= 400 ? 'bg-yellow-500/10 text-yellow-600' :
+                          (emp.score ?? emp.productivityScore ?? 0) >= 200 ? 'bg-orange-500/10 text-orange-600' :
+                          'bg-red-500/10 text-red-600'
+                        }`}>
                           <Sparkles className="w-4 h-4" />
-                          <span className="font-bold text-sm">Score: {emp.productivityScore}</span>
+                          <span>Score: {emp.score ?? emp.productivityScore ?? 0}{emp.score !== undefined ? '/1000' : ''}</span>
                         </div>
                       </div>
 
@@ -235,28 +260,46 @@ export default function ManagerPerformance() {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-card border border-border p-5 rounded-2xl">
-                    <p className="text-sm text-muted-foreground mb-1">Tasks Assigned</p>
-                    <p className="text-3xl font-heading font-bold">{myStats.stats.tasksAssigned}</p>
+                    <p className="text-sm text-muted-foreground mb-1">Overall Score</p>
+                    <p className={`text-3xl font-heading font-bold ${
+                      (myStats.score ?? 0) >= 800 ? 'text-green-500' :
+                      (myStats.score ?? 0) >= 600 ? 'text-blue-500' :
+                      (myStats.score ?? 0) >= 400 ? 'text-yellow-500' : 'text-red-500'
+                    }`}>{myStats.score ?? myStats.stats?.tasksAssigned ?? 0}<span className="text-lg text-muted-foreground">/1000</span></p>
                   </div>
                   <div className="bg-card border border-border p-5 rounded-2xl">
-                    <p className="text-sm text-muted-foreground mb-1">Tasks Completed</p>
-                    <p className="text-3xl font-heading font-bold text-green-500">{myStats.stats.tasksCompleted}</p>
+                    <p className="text-sm text-muted-foreground mb-1">Team Tasks Done</p>
+                    <p className="text-3xl font-heading font-bold text-green-500">{myStats.breakdown?.teamDone ?? myStats.stats?.tasksCompleted ?? 0}</p>
                   </div>
                   <div className="bg-card border border-border p-5 rounded-2xl">
-                    <p className="text-sm text-muted-foreground mb-1">Overdue Tasks</p>
-                    <p className="text-3xl font-heading font-bold text-red-500">{myStats.stats.tasksOverdue}</p>
+                    <p className="text-sm text-muted-foreground mb-1">Team Overdue</p>
+                    <p className="text-3xl font-heading font-bold text-red-500">{myStats.breakdown?.teamOverdue ?? myStats.stats?.tasksOverdue ?? 0}</p>
                   </div>
                   <div className="bg-card border border-border p-5 rounded-2xl">
-                    <p className="text-sm text-muted-foreground mb-1">On-Time Rate</p>
-                    <p className="text-3xl font-heading font-bold text-blue-500">{myStats.stats.onTimeRate}%</p>
+                    <p className="text-sm text-muted-foreground mb-1">Completion Rate</p>
+                    <p className="text-3xl font-heading font-bold text-blue-500">{myStats.breakdown?.teamCompletionRate ?? myStats.stats?.onTimeRate ?? 0}%</p>
                   </div>
+                </div>
+
+                <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-6 relative overflow-hidden">
+                  <Sparkles className="absolute top-4 right-4 w-24 h-24 text-blue-500 opacity-5" />
+                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Sparkles className="w-5 h-5 text-blue-500" /> AI Executive Summary</h3>
+                  {loadingAi ? (
+                    <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Generating personalized insight...
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                      {aiReport}
+                    </p>
+                  )}
                 </div>
 
                 <div className="bg-card p-6 rounded-2xl border border-border">
                   <h3 className="text-lg font-semibold mb-4">Productivity Trend (8 Weeks)</h3>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={myStats.weeklyData}>
+                      <LineChart data={myStats.weeklyData || []}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                         <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                         <YAxis tick={{ fontSize: 12 }} />

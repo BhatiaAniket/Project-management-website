@@ -18,7 +18,8 @@ const Meetings: React.FC = () => {
   const fetchMeetings = async () => {
     setLoading(true);
     try {
-      const res = await companyAPI.listMeetings({ status: activeTab });
+      // Fetch all to do robust local filtering based on time instead of just string tags
+      const res = await companyAPI.listMeetings();
       setMeetings(res.data.data.meetings || []);
     } catch { setMeetings([]); }
     finally { setLoading(false); }
@@ -84,6 +85,25 @@ const Meetings: React.FC = () => {
     finally { setCreateLoading(false); }
   };
 
+  const isMeetingActive = (startTime: string, durationMin: number) => {
+    const now = new Date();
+    const start = new Date(startTime);
+    const end = new Date(start.getTime() + durationMin * 60000);
+    const joinWindow = new Date(start.getTime() - 10 * 60000);
+    return now >= joinWindow && now <= end;
+  };
+
+  const isMeetingPast = (startTime: string, durationMin: number) => {
+    const now = new Date();
+    const start = new Date(startTime);
+    const end = new Date(start.getTime() + durationMin * 60000);
+    return now > end;
+  };
+
+  const filteredMeetings = meetings.filter(m => 
+    activeTab === 'past' ? isMeetingPast(m.startTime, m.durationMinutes) : !isMeetingPast(m.startTime, m.durationMinutes)
+  );
+
   const toggleParticipant = (id: string) => {
     setForm((prev) => ({
       ...prev,
@@ -113,7 +133,7 @@ const Meetings: React.FC = () => {
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-      ) : meetings.length === 0 ? (
+      ) : filteredMeetings.length === 0 ? (
         <div className="text-center py-16 bg-card border border-border rounded-2xl">
           <CalendarClock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
           <h3 className="text-lg font-semibold mb-1">No {activeTab} meetings</h3>
@@ -121,40 +141,51 @@ const Meetings: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {meetings.map((meeting, i) => (
-            <motion.div key={meeting._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="bg-card border border-border rounded-2xl p-5 hover:border-accent/50 transition-all">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-base font-semibold">{meeting.title}</h3>
-                  <span className="text-xs text-muted-foreground capitalize">{meeting.type?.replace(/_/g, ' ')}</span>
+          {filteredMeetings.map((meeting, i) => {
+            const active = isMeetingActive(meeting.startTime, meeting.durationMinutes);
+            const isPast = isMeetingPast(meeting.startTime, meeting.durationMinutes);
+            
+            return (
+              <motion.div key={meeting._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className={`bg-card border border-border rounded-2xl p-5 hover:border-accent/50 transition-all ${isPast ? 'opacity-80' : ''}`}>
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="text-base font-semibold">{meeting.title}</h3>
+                    <span className="text-xs text-muted-foreground capitalize">{meeting.type?.replace(/_/g, ' ')}</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${isPast ? 'bg-background border border-border' : active ? 'bg-blue-500/10 text-blue-500' : 'bg-muted text-muted-foreground'}`}>
+                    {isPast ? 'Completed' : active ? 'Ongoing' : 'Upcoming'}
+                  </span>
                 </div>
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${meeting.status === 'scheduled' ? 'bg-blue-500/10 text-blue-500' : meeting.status === 'completed' ? 'bg-green-500/10 text-green-500' : 'bg-muted text-muted-foreground'}`}>
-                  {meeting.status}
-                </span>
-              </div>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2"><CalendarClock className="w-4 h-4" />{new Date(meeting.startTime).toLocaleString()}</div>
-                <div className="flex items-center gap-2"><Clock className="w-4 h-4" />{meeting.durationMinutes} min</div>
-                <div className="flex items-center gap-2"><Users className="w-4 h-4" />{meeting.participants?.length || 0} participants</div>
-              </div>
-              {meeting.status === 'scheduled' && (
-                <motion.button 
-                  onClick={() => navigate(`/company/meetings/${meeting.roomId || meeting._id}`)}
-                  whileHover={{ scale: 1.02 }} 
-                  whileTap={{ scale: 0.98 }} 
-                  className="w-full mt-4 py-2.5 rounded-full bg-foreground text-background text-sm font-medium flex items-center justify-center gap-2"
-                >
-                  <Video className="w-4 h-4" /> Join Meeting
-                </motion.button>
-              )}
-              {meeting.summary?.rawSummary && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <div className="flex items-center gap-1.5 mb-1"><Sparkles className="w-3.5 h-3.5 text-accent" /><span className="text-xs font-semibold">AI Summary</span></div>
-                  <p className="text-xs text-muted-foreground line-clamp-3">{meeting.summary.rawSummary}</p>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2"><CalendarClock className="w-4 h-4" />{new Date(meeting.startTime).toLocaleString()}</div>
+                  <div className="flex items-center gap-2"><Clock className="w-4 h-4" />{meeting.durationMinutes} min</div>
+                  <div className="flex items-center gap-2"><Users className="w-4 h-4" />{meeting.participants?.length || 0} participants</div>
                 </div>
-              )}
-            </motion.div>
-          ))}
+                
+                {active ? (
+                  <motion.button 
+                    onClick={() => navigate(`/company/meetings/${meeting.roomId || meeting._id}`)}
+                    whileHover={{ scale: 1.02 }} 
+                    whileTap={{ scale: 0.98 }} 
+                    className="w-full mt-4 py-2.5 rounded-full bg-foreground text-background text-sm font-medium flex items-center justify-center gap-2"
+                  >
+                    <Video className="w-4 h-4" /> Join Meeting
+                  </motion.button>
+                ) : !isPast ? (
+                  <button disabled className="w-full mt-4 py-2.5 rounded-full bg-muted text-muted-foreground text-sm font-medium flex items-center justify-center gap-2 cursor-not-allowed">
+                    Not Started
+                  </button>
+                ) : null}
+
+                {meeting.summary?.rawSummary && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <div className="flex items-center gap-1.5 mb-2"><Sparkles className="w-3.5 h-3.5 text-accent" /><span className="text-xs font-semibold uppercase tracking-wider text-accent/80">AI Summary</span></div>
+                    <p className="text-xs text-muted-foreground line-clamp-3">{meeting.summary.rawSummary}</p>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
       )}
 

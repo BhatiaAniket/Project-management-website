@@ -194,24 +194,65 @@ exports.addTask = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Project not found', errors: [] });
     }
 
+    // resolving assignedManager: if a manager is creating the task, that's the manager
+    // else the project.manager is the manager
+    const assignedManager = req.user.role === 'manager'
+      ? req.user._id
+      : (project.manager || null);
+
     const task = await Task.create({
       title,
       description: description || '',
       project: project._id,
       company: req.companyId,
       assignedTo: assignedTo || null,
+      assignedManager,
       priority: priority || 'medium',
       dueDate: dueDate || null,
+      status: 'todo',
     });
 
-    // Recalculate progress
-    await project.calculateProgress();
+    // Notify assigned employee via socket
+    if (assignedTo) {
+      try {
+        const { emitToUser } = require('../socket');
+        const Notification = require('../models/Notification');
+        emitToUser(assignedTo.toString(), 'task:assigned', {
+          task: { _id: task._id, title, priority },
+          message: `New task assigned: ${title}`,
+        });
+        await Notification.create({
+          company: req.companyId,
+          user: assignedTo,
+          title: 'New Task Assigned',
+          message: `New task assigned to you: ${title}`,
+          type: 'task_assigned',
+          relatedId: task._id,
+          relatedModel: 'Task',
+        });
+      } catch (e) {
+        console.error('Socket/notification error:', e.message);
+      }
+    }
+
+    // Update project status to in_progress if not_started
+    if (project.status === 'not_started') {
+      await Project.findByIdAndUpdate(project._id, { status: 'in_progress' });
+    }
+
+    try {
+      if (typeof project.calculateProgress === 'function') {
+        await project.calculateProgress();
+      }
+    } catch (e) { }
 
     return res.status(201).json({ success: true, data: task });
   } catch (error) {
+    console.error('addTask error:', error.message);
     return res.status(500).json({ success: false, message: 'Server error', errors: [] });
   }
 };
+
 
 // ━━━ UPDATE TASK ━━━
 exports.updateTask = async (req, res) => {
@@ -242,6 +283,71 @@ exports.updateTask = async (req, res) => {
     } catch (e) { }
 
     return res.status(200).json({ success: true, data: updatedTask });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error', errors: [] });
+  }
+};
+
+// ━━━ ASSIGN MANAGER TO PROJECT ━━━
+exports.assignManager = async (req, res) => {
+  try {
+    const { managerId } = req.body;
+    const User = require('../models/User');
+
+    if (!managerId) {
+      return res.status(400).json({ success: false, message: 'managerId is required', errors: [] });
+    }
+
+    // Verify manager belongs to this company
+    const manager = await User.findOne({ _id: managerId, company: req.companyId, role: 'manager' });
+    if (!manager) {
+      return res.status(404).json({ success: false, message: 'Manager not found in this company', errors: [] });
+    }
+
+    const project = await Project.findOneAndUpdate(
+      { _id: req.params.id, company: req.companyId },
+      { manager: managerId, status: 'in_progress' },
+      { new: true }
+    ).populate('manager', 'fullName email');
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found', errors: [] });
+    }
+
+    // Notify manager via Socket.io
+    try {
+      const { emitToUser } = require('../socket');
+      const Notification = require('../models/Notification');
+
+      emitToUser(managerId.toString(), 'project:assigned', {
+        projectId: project._id,
+        projectName: project.name,
+        message: `You have been assigned project: ${project.name}`,
+      });
+
+      await Notification.create({
+        company: req.companyId,
+        user: managerId,
+        title: 'Project Assigned',
+        message: `New project assigned to you: ${project.name}`,
+        type: 'general',
+        relatedId: project._id,
+        relatedModel: 'Project',
+      });
+      emitToUser(managerId.toString(), 'notification');
+    } catch (e) {
+      console.error('Socket/notification error:', e.message);
+    }
+
+    await ActivityLog.create({
+      company: req.companyId,
+      user: req.user._id,
+      action: `Assigned project "${project.name}" to manager ${manager.fullName}`,
+      entity: 'project',
+      entityId: project._id,
+    });
+
+    return res.status(200).json({ success: true, data: project });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error', errors: [] });
   }

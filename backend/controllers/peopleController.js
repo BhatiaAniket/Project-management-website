@@ -13,7 +13,7 @@ const { emitToCompany } = require('../socket');
 exports.listPeople = async (req, res) => {
   try {
     const { role, department, status, search, page = 1, limit = 20 } = req.query;
-    const query = { company: req.companyId, role: { $ne: 'company_admin' } };
+    const query = { company: req.companyId };
 
     if (role) query.role = role;
     if (department) query.department = department;

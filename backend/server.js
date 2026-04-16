@@ -97,7 +97,6 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/files', filesRoutes);
-app.use('/api/manager', managerRoutes);
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));

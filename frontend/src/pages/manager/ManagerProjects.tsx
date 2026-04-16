@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, LayoutGrid, List, Loader2, Calendar, Users, BarChart3, ChevronLeft, Plus, Check, Clock, AlertCircle } from 'lucide-react';
+import { Search, LayoutGrid, List, Loader2, Calendar, Users, BarChart3, ChevronLeft, Plus } from 'lucide-react';
 import { companyAPI } from '../../api/company';
+import { managerAPI } from '../../api/manager';
 import { showToast } from '../../components/Toast';
 
 const priorityColors: Record<string, string> = {
@@ -23,12 +24,26 @@ export default function ManagerProjects() {
   // Detail View State
   const [selectedProject, setSelectedProject] = useState<any>(null);
   const [projectTasks, setProjectTasks] = useState<any[]>([]);
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
 
   // Create Task Form
   const [taskForm, setTaskForm] = useState({ title: '', description: '', assignedTo: '', priority: 'medium', dueDate: '' });
   const [taskAdding, setTaskAdding] = useState(false);
+
+  // Fetch all company employees for assignee dropdown
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await managerAPI.getEmployees();
+        setAllEmployees(res.data.data || []);
+      } catch {
+        // silently fail — assignee field still usable without list
+      }
+    };
+    fetchEmployees();
+  }, []);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -59,7 +74,15 @@ export default function ManagerProjects() {
     if (!selectedProject) return;
     setTaskAdding(true);
     try {
-      await companyAPI.addTask(selectedProject._id, taskForm);
+      // Use managerAPI.createTask to properly set assignedManager, emit socket events
+      await managerAPI.createTask({
+        title: taskForm.title,
+        description: taskForm.description,
+        assignedTo: taskForm.assignedTo || undefined,
+        projectId: selectedProject._id,
+        priority: taskForm.priority,
+        dueDate: taskForm.dueDate || undefined,
+      });
       showToast('Task added successfully', 'success');
       setShowTaskModal(false);
       setTaskForm({ title: '', description: '', assignedTo: '', priority: 'medium', dueDate: '' });
@@ -74,9 +97,9 @@ export default function ManagerProjects() {
   const handleTaskStatusChange = async (taskId: string, newStatus: string) => {
     if (!selectedProject) return;
     try {
-      await companyAPI.updateTask(selectedProject._id, taskId, { status: newStatus });
+      await managerAPI.updateTask(taskId, { status: newStatus });
       loadProjectDetails(selectedProject._id);
-    } catch (err: any) {
+    } catch {
       showToast('Failed to update task', 'error');
     }
   };
@@ -106,7 +129,6 @@ export default function ManagerProjects() {
               <div className="flex flex-wrap items-center gap-6 text-sm">
                 <div><span className="text-muted-foreground">Deadline:</span> <span className="font-medium">{new Date(selectedProject.deadline).toLocaleDateString()}</span></div>
                 <div><span className="text-muted-foreground">Progress:</span> <span className="font-medium text-green-500">{selectedProject.progress}%</span></div>
-                <div><span className="text-muted-foreground">Team Size:</span> <span className="font-medium">{selectedProject.team?.length || 0}</span></div>
               </div>
             </div>
 
@@ -117,11 +139,15 @@ export default function ManagerProjects() {
               </button>
             </div>
 
-            {/* Kanban-lite view */}
+            {/* Task Kanban */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {['todo', 'in_progress', 'done', 'overdue'].map(col => {
-                const colTasks = projectTasks.filter(t => t.status === col);
-                const colTitles: Record<string, string> = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', overdue: 'Overdue' };
+              {['todo', 'in_progress', 'under_review', 'completed'].map(col => {
+                const colTasks = projectTasks.filter(t =>
+                  col === 'completed'
+                    ? (t.status === 'completed' || t.status === 'done')
+                    : t.status === col
+                );
+                const colTitles: Record<string, string> = { todo: 'To Do', in_progress: 'In Progress', under_review: 'Under Review', completed: 'Completed' };
                 return (
                   <div key={col} className="bg-muted/30 rounded-2xl p-4 border border-border flex flex-col h-full">
                     <h3 className="font-semibold text-sm mb-3 flex items-center justify-between">
@@ -140,7 +166,7 @@ export default function ManagerProjects() {
                             <div className="flex items-center gap-2 mb-3">
                               {task.assignedTo ? (
                                 <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[10px] text-blue-700 font-bold" title={task.assignedTo.fullName}>
-                                  {task.assignedTo.fullName.charAt(0)}
+                                  {task.assignedTo.fullName?.charAt(0)}
                                 </div>
                               ) : (
                                 <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[10px] text-gray-500 font-bold" title="Unassigned">?</div>
@@ -156,15 +182,15 @@ export default function ManagerProjects() {
                             >
                               <option value="todo">To Do</option>
                               <option value="in_progress">In Progress</option>
-                              <option value="done">Done</option>
-                              <option value="overdue">Overdue</option>
+                              <option value="under_review">Under Review</option>
+                              <option value="completed">Completed</option>
                             </select>
                           </div>
                         ))
                       )}
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           </>
@@ -176,14 +202,17 @@ export default function ManagerProjects() {
             <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm">
               <h2 className="text-lg font-bold mb-4">New Task</h2>
               <form onSubmit={handleTaskCreate} className="space-y-4">
-                <input placeholder="Task Title" value={taskForm.title} onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm" required />
+                <input placeholder="Task Title *" value={taskForm.title} onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm" required />
                 <textarea placeholder="Description" value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none h-20" />
+
+                {/* Assignee dropdown uses all company employees */}
                 <select value={taskForm.assignedTo} onChange={e => setTaskForm({ ...taskForm, assignedTo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm">
-                  <option value="">Assignee (Optional)</option>
-                  {selectedProject.team?.map((member: any) => (
-                    <option key={member._id} value={member._id}>{member.fullName}</option>
+                  <option value="">Assign to employee (Optional)</option>
+                  {allEmployees.map((emp: any) => (
+                    <option key={emp._id} value={emp._id}>{emp.fullName} — {emp.position || emp.email}</option>
                   ))}
                 </select>
+
                 <div className="grid grid-cols-2 gap-2">
                   <input type="date" value={taskForm.dueDate} onChange={e => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="px-3 py-2 rounded-xl border border-border bg-background text-sm" />
                   <select value={taskForm.priority} onChange={e => setTaskForm({ ...taskForm, priority: e.target.value })} className="px-3 py-2 rounded-xl border border-border bg-background text-sm">
@@ -192,7 +221,7 @@ export default function ManagerProjects() {
                 </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setShowTaskModal(false)} className="flex-1 py-2 text-sm text-muted-foreground hover:bg-muted rounded-xl">Cancel</button>
-                  <button type="submit" disabled={taskAdding} className="flex-1 py-2 text-sm bg-foreground text-background rounded-xl font-medium">{taskAdding ? 'Adding...' : 'Add'}</button>
+                  <button type="submit" disabled={taskAdding} className="flex-1 py-2 text-sm bg-foreground text-background rounded-xl font-medium">{taskAdding ? 'Adding...' : 'Add Task'}</button>
                 </div>
               </form>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import CountUp from 'react-countup';
 import {
@@ -6,20 +6,21 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import { companyAPI } from '../../api/company';
+import { managerAPI } from '../../api/manager';
 import { showToast } from '../../components/Toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts';
-import { useCallback } from 'react';
 
 const ManagerOverview = () => {
    const { user } = useAuth();
    const { socket } = useSocket();
    const [stats, setStats] = useState({
-      totalEmployees: 0,
+      assignedProjects: 0,
       activeProjects: 0,
-      completedProjects: 0,
-      pendingTasks: 0,
-      upcomingMeetings: 0
+      totalTasks: 0,
+      completedTasks: 0,
+      overdueTasks: 0,
+      upcomingMeetings: 0,
+      totalEmployees: 0,
    });
    const [projectProgress, setProjectProgress] = useState([]);
    const [taskStatus, setTaskStatus] = useState({ todo: 0, inProgress: 0, done: 0, overdue: 0 });
@@ -34,18 +35,18 @@ const ManagerOverview = () => {
             taskStatusRes,
             activityRes
          ] = await Promise.all([
-            companyAPI.getOverviewStats(),
-            companyAPI.getProjectsProgress(),
-            companyAPI.getTasksStatusSummary(),
-            companyAPI.getRecentActivity()
+            managerAPI.getOverviewStats(),
+            managerAPI.getProjectsProgress(),
+            managerAPI.getTasksStatusSummary(),
+            managerAPI.getRecentActivity()
          ]);
 
-         setStats(statsRes.data.data);
-         setProjectProgress(progressRes.data.data);
-         setTaskStatus(taskStatusRes.data.data);
-         setRecentActivity(activityRes.data.data);
+         setStats(statsRes.data.data || {});
+         setProjectProgress(progressRes.data.data || []);
+         setTaskStatus(taskStatusRes.data.data || { todo: 0, inProgress: 0, done: 0, overdue: 0 });
+         setRecentActivity(activityRes.data.data || []);
       } catch (error) {
-         console.error('Error fetching dashboard data:', error);
+         console.error('Error fetching manager dashboard data:', error);
          showToast('Failed to load dashboard data', 'error');
       } finally {
          setLoading(false);
@@ -60,15 +61,21 @@ const ManagerOverview = () => {
       if (!socket) return;
       const refresh = () => fetchAllData();
       socket.on('task:updated', refresh);
+      socket.on('task:status_updated', refresh);
       socket.on('report:submitted', refresh);
       socket.on('report:reviewed', refresh);
       socket.on('meeting:scheduled', refresh);
+      socket.on('project:assigned', refresh);
+      socket.on('project:completed', refresh);
 
       return () => {
          socket.off('task:updated', refresh);
+         socket.off('task:status_updated', refresh);
          socket.off('report:submitted', refresh);
          socket.off('report:reviewed', refresh);
          socket.off('meeting:scheduled', refresh);
+         socket.off('project:assigned', refresh);
+         socket.off('project:completed', refresh);
       };
    }, [socket, fetchAllData]);
 
@@ -125,7 +132,7 @@ const ManagerOverview = () => {
                   </div>
                </div>
                <p className="text-3xl font-bold font-heading">
-                  <CountUp end={stats.activeProjects} duration={2} />
+                  <CountUp end={stats.assignedProjects || 0} duration={2} />
                </p>
                <p className="text-sm text-muted-foreground mt-1">Assigned Projects</p>
             </motion.div>
@@ -142,7 +149,7 @@ const ManagerOverview = () => {
                   </div>
                </div>
                <p className="text-3xl font-bold font-heading">
-                  <CountUp end={taskStatus.todo + taskStatus.inProgress + taskStatus.done + taskStatus.overdue} duration={2} />
+                  <CountUp end={stats.totalTasks || 0} duration={2} />
                </p>
                <p className="text-sm text-muted-foreground mt-1">Total Tasks</p>
             </motion.div>
@@ -159,7 +166,7 @@ const ManagerOverview = () => {
                   </div>
                </div>
                <p className="text-3xl font-bold font-heading">
-                  <CountUp end={taskStatus.done} duration={2} />
+                  <CountUp end={stats.completedTasks || 0} duration={2} />
                </p>
                <p className="text-sm text-muted-foreground mt-1">Completed Tasks</p>
             </motion.div>
@@ -176,7 +183,7 @@ const ManagerOverview = () => {
                   </div>
                </div>
                <p className="text-3xl font-bold font-heading">
-                  <CountUp end={taskStatus.overdue} duration={2} />
+                  <CountUp end={stats.overdueTasks || 0} duration={2} />
                </p>
                <p className="text-sm text-muted-foreground mt-1">Overdue Tasks</p>
             </motion.div>
@@ -193,7 +200,7 @@ const ManagerOverview = () => {
                   </div>
                </div>
                <p className="text-3xl font-bold font-heading">
-                  <CountUp end={stats.upcomingMeetings} duration={2} />
+                  <CountUp end={stats.upcomingMeetings || 0} duration={2} />
                </p>
                <p className="text-sm text-muted-foreground mt-1">Upcoming Meetings</p>
             </motion.div>
@@ -239,10 +246,10 @@ const ManagerOverview = () => {
                   <RePieChart>
                      <Pie
                         data={[
-                           { name: 'To Do', value: taskStatus.todo },
-                           { name: 'In Progress', value: taskStatus.inProgress },
-                           { name: 'Done', value: taskStatus.done },
-                           { name: 'Overdue', value: taskStatus.overdue }
+                           { name: 'To Do', value: taskStatus.todo || 0 },
+                           { name: 'In Progress', value: taskStatus.inProgress || 0 },
+                           { name: 'Done', value: taskStatus.done || 0 },
+                           { name: 'Overdue', value: taskStatus.overdue || 0 }
                         ]}
                         cx="50%"
                         cy="50%"
@@ -262,19 +269,19 @@ const ManagerOverview = () => {
                <div className="flex flex-wrap justify-center gap-4 mt-4">
                   <div className="flex items-center gap-2">
                      <div className="w-3 h-3 rounded-full bg-gray-400"></div>
-                     <span className="text-sm">To Do ({taskStatus.todo})</span>
+                     <span className="text-sm">To Do ({taskStatus.todo || 0})</span>
                   </div>
                   <div className="flex items-center gap-2">
                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                     <span className="text-sm">In Progress ({taskStatus.inProgress})</span>
+                     <span className="text-sm">In Progress ({taskStatus.inProgress || 0})</span>
                   </div>
                   <div className="flex items-center gap-2">
                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                     <span className="text-sm">Done ({taskStatus.done})</span>
+                     <span className="text-sm">Done ({taskStatus.done || 0})</span>
                   </div>
                   <div className="flex items-center gap-2">
                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                     <span className="text-sm">Overdue ({taskStatus.overdue})</span>
+                     <span className="text-sm">Overdue ({taskStatus.overdue || 0})</span>
                   </div>
                </div>
             </motion.div>

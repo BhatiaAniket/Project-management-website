@@ -147,13 +147,19 @@ export default function ManagerMeetings() {
     const now = new Date();
     const start = new Date(startTime);
     const end = new Date(start.getTime() + durationMin * 60000);
-    // Allow joining 10 mins early, until meeting ends
     const joinWindow = new Date(start.getTime() - 10 * 60000);
     return now >= joinWindow && now <= end;
   };
 
-  const upcomingMeetings = meetings.filter(m => new Date(m.startTime) >= new Date() || m.status === 'active');
-  const pastMeetings = meetings.filter(m => new Date(m.startTime) < new Date() && m.status !== 'active');
+  const isMeetingPast = (startTime: string, durationMin: number) => {
+    const now = new Date();
+    const start = new Date(startTime);
+    const end = new Date(start.getTime() + durationMin * 60000);
+    return now > end;
+  };
+
+  const upcomingMeetings = meetings.filter(m => !isMeetingPast(m.startTime, m.durationMinutes));
+  const pastMeetings = meetings.filter(m => isMeetingPast(m.startTime, m.durationMinutes));
 
   return (
     <div className="space-y-6">
@@ -233,12 +239,21 @@ export default function ManagerMeetings() {
           {pastMeetings.length === 0 ? (
             <p className="col-span-full py-8 text-center text-muted-foreground">No past meetings.</p>
           ) : pastMeetings.map(m => (
-            <div key={m._id} className="bg-muted border border-border rounded-2xl p-5 opacity-70">
-              <h3 className="font-semibold text-lg mb-2">{m.title}</h3>
-              <div className="text-sm text-muted-foreground flex items-center gap-2 mb-1">
+            <div key={m._id} className="bg-muted border border-border rounded-2xl p-5">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-semibold text-lg">{m.title}</h3>
+                <span className="text-[10px] bg-background px-2.5 py-1 rounded-full uppercase tracking-wider font-bold border border-border opacity-70">Completed</span>
+              </div>
+              <div className="text-sm text-muted-foreground flex items-center gap-2 mb-4">
                 <CalendarIcon className="w-4 h-4" /> {new Date(m.startTime).toLocaleDateString()}
               </div>
-              <p className="text-xs text-muted-foreground">Status: {m.status}</p>
+              
+              {m.summary?.rawSummary && (
+                <div className="mt-2 pt-4 border-t border-border">
+                  <div className="flex items-center gap-1.5 mb-2"><span className="text-xs font-semibold uppercase tracking-wider text-accent/80">AI Summary</span></div>
+                  <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">{m.summary.rawSummary}</p>
+                </div>
+              )}
             </div>
           ))}
         </div>

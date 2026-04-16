@@ -164,7 +164,7 @@ const EmployeeMeetings = () => {
                   <div className="flex justify-between items-start mb-2">
                     <p className="font-medium text-sm">{req.title.includes('Request') ? req.metadata?.originalRequest?.title || 'Meeting Request' : req.title}</p>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize border ${req.title.includes('Accepted') ? 'bg-green-100 text-green-700 border-green-200' :
-                        req.title.includes('Declined') ? 'bg-red-100 text-red-700 border-red-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                      req.title.includes('Declined') ? 'bg-red-100 text-red-700 border-red-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'
                       }`}>
                       {req.title.includes('Accepted') ? 'Accepted' : req.title.includes('Declined') ? 'Declined' : 'Pending'}
                     </span>

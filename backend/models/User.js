@@ -95,6 +95,22 @@ const userSchema = new mongoose.Schema(
       enum: ['light', 'dark'],
       default: 'light',
     },
+    // ── Performance scoring ──
+    performanceScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 1000,
+    },
+    // ── AI Report caching (rate-limited: once per day) ──
+    lastAIReport: {
+      type: String,
+      default: '',
+    },
+    lastAIReportAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

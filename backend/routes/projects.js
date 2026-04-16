@@ -8,7 +8,7 @@ const projectController = require('../controllers/projectController');
 router.use(protect);
 router.use(verifyCompanyScope);
 
-// Projects
+// ── Projects CRUD ─────────────────────────────────────────────────────────────
 router.get('/', authorize('company_admin', 'manager'), projectController.listProjects);
 router.get('/:id', authorize('company_admin', 'manager'), projectController.getProject);
 
@@ -25,10 +25,11 @@ router.post(
 router.put('/:id', authorize('company_admin'), projectController.updateProject);
 router.delete('/:id', authorize('company_admin'), projectController.deleteProject);
 
-// Tasks across all projects
-router.get('/tasks/all', authorize('company_admin', 'manager'), projectController.listAllTasks);
+// ── Project → Manager assignment ──────────────────────────────────────────────
+router.patch('/:id/assign', authorize('company_admin'), projectController.assignManager);
 
-// Tasks within projects
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+router.get('/tasks/all', authorize('company_admin', 'manager'), projectController.listAllTasks);
 router.post('/:id/tasks', authorize('company_admin', 'manager'), projectController.addTask);
 router.put('/:id/tasks/:taskId', authorize('company_admin', 'manager'), projectController.updateTask);
 router.delete('/:id/tasks/:taskId', authorize('company_admin', 'manager'), projectController.deleteTask);

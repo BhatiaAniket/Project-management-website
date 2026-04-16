@@ -27,10 +27,12 @@ export const employeeAPI = {
   requestMeeting: (data: any) => api.post('/employee/meetings/request', data),
   getMeetingRequests: () => api.get('/employee/meetings/requests'),
 
+  // Performance — returns unified score /1000, breakdown, weeklyData, recentRatings
   getPerformance: () => api.get('/employee/performance'),
+  // AI report (rate-limited: once per day, cached)
+  getPerformanceAIReport: () => api.get('/employee/performance/ai-report'),
 
   getColleagues: () => api.get('/employee/colleagues'),
 
-  // Assuming notifications and chat come from generic endpoints:
   getNotifications: () => api.get('/notifications'),
 };

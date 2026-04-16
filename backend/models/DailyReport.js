@@ -38,10 +38,22 @@ const dailyReportSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    // Legacy single-URL field (kept for backward compat)
     attachmentUrl: {
       type: String,
       default: '',
     },
+    // Rich attachments array — populated when file upload middleware is used
+    attachments: [
+      {
+        fileName: String,
+        originalName: String,
+        url: String,
+        mimeType: String,
+        size: Number,
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
     status: {
       type: String,
       enum: ['pending_review', 'approved', 'needs_revision'],

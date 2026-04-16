@@ -201,15 +201,31 @@ const ManagerDailyReports = () => {
                        }`}>
                          {selectedReport.status?.replace('_', ' ')}
                        </span>
-                       {selectedReport.reportFile && (
-                          <a 
-                            href={selectedReport.reportFile} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="px-4 py-1.5 rounded-full bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 transition-all text-center leading-none"
-                          >
-                            <FileText className="w-3 h-3" /> View Attachment
-                          </a>
+                       {(selectedReport.attachments?.length > 0 || selectedReport.attachmentUrl) && (
+                          <div className="flex flex-wrap gap-2">
+                             {selectedReport.attachments?.length > 0 ? (
+                                selectedReport.attachments.map((file: any, i: number) => (
+                                  <a 
+                                    key={i}
+                                    href={file.url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="px-4 py-1.5 rounded-full bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 transition-all text-center leading-none"
+                                  >
+                                    <FileText className="w-3 h-3" /> {file.originalName || 'View Attachment'}
+                                  </a>
+                                ))
+                             ) : (
+                                <a 
+                                  href={selectedReport.attachmentUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="px-4 py-1.5 rounded-full bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 transition-all text-center leading-none"
+                                >
+                                  <FileText className="w-3 h-3" /> View Attachment
+                                </a>
+                             )}
+                          </div>
                        )}
                     </div>
                     <h2 className="text-3xl font-bold font-heading tracking-tight leading-tight">{selectedReport.task?.title}</h2>

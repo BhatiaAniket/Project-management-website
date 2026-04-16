@@ -295,10 +295,15 @@ exports.endMeeting = async (req, res) => {
     }
 
     meeting.summary = {
-      text: aiSummary,
-      generatedAt: new Date(),
-      transcript: transcript || '',
+      rawSummary: aiSummary,
+      keyPoints: [],
+      actionItems: [],
+      decisions: []
     };
+    
+    if (transcript) {
+      meeting.transcript = transcript;
+    }
 
     await meeting.save();
 

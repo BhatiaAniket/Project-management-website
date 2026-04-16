@@ -13,7 +13,7 @@ exports.getOverviewStats = async (req, res) => {
     const [managers, employees, activeProjects, completedProjects, pendingTasks, meetings, company] = await Promise.all([
       User.countDocuments({ company: companyId, role: "manager" }),
       User.countDocuments({ company: companyId, role: "employee" }),
-      Project.countDocuments({ company: companyId, status: "active" }),
+      Project.countDocuments({ company: companyId, status: "in_progress" }),
       Project.countDocuments({ company: companyId, status: "completed" }),
       Task.countDocuments({ company: companyId, status: { $nin: ["done", "completed"] } }),
       Meeting.countDocuments({ companyId: companyId, startTime: { $gte: new Date() } }),
@@ -21,13 +21,16 @@ exports.getOverviewStats = async (req, res) => {
     ]);
 
     return res.json({
-      companyName: company?.name || "",
-      totalManagers: managers,
-      totalEmployees: employees,
-      activeProjects,
-      completedProjects,
-      pendingTasks,
-      upcomingMeetings: meetings
+      success: true,
+      data: {
+        companyName: company?.name || "",
+        totalManagers: managers,
+        totalEmployees: employees,
+        activeProjects,
+        completedProjects,
+        pendingTasks,
+        upcomingMeetings: meetings
+      }
     });
   } catch (error) {
     console.error('Get overview stats error:', error);
@@ -264,7 +267,7 @@ exports.getHoverDetails = async (req, res) => {
         data = data.map(u => ({ name: u.fullName, department: u.department, position: u.position, isActive: u.isActive }));
         break;
       case 'active-projects':
-        const activeProjects = await Project.find({ company: companyId, status: "active" })
+        const activeProjects = await Project.find({ company: companyId, status: "in_progress" })
           .populate("manager", "fullName")
           .select("name manager deadline progress");
         data = activeProjects.map(p => ({

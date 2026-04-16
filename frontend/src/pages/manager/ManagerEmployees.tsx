@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { companyAPI } from '../../api/company';
+import { managerAPI } from '../../api/manager';
 import { showToast } from '../../components/Toast';
 import { Search, Loader2, Users, TrendingUp } from 'lucide-react';
 
@@ -12,17 +12,8 @@ const ManagerEmployees = () => {
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        // managerController.getEmployees maps to /api/manager/employees
-        const res = await companyAPI.getManagerEmployees?.();
-        // Wait, companyAPI doesn't have getManagerEmployees yet.
-        // Let's use generic axios or the instance
-        const axios = require('axios').default;
-        const api = axios.create({
-          baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
-          headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
-        });
-        const realRes = await api.get('/manager/employees');
-        setEmployees(realRes.data.data || []);
+        const res = await managerAPI.getEmployees();
+        setEmployees(res.data.data || []);
       } catch (e) {
         showToast('Failed to load employees', 'error');
       } finally {
@@ -32,7 +23,10 @@ const ManagerEmployees = () => {
     fetchEmployees();
   }, []);
 
-  const filtered = employees.filter(e => e.fullName.toLowerCase().includes(search.toLowerCase()) || e.email.toLowerCase().includes(search.toLowerCase()));
+  const filtered = employees.filter(e =>
+    e.fullName?.toLowerCase().includes(search.toLowerCase()) ||
+    e.email?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -60,7 +54,7 @@ const ManagerEmployees = () => {
         <div className="text-center py-16 bg-card border border-border rounded-2xl">
           <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
           <h3 className="text-lg font-semibold mb-1">No team members found</h3>
-          <p className="text-sm text-muted-foreground">You may not be managing any active projects with members yet.</p>
+          <p className="text-sm text-muted-foreground">No employees have been added to this company yet.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -68,25 +62,41 @@ const ManagerEmployees = () => {
             <motion.div key={emp._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="bg-card border border-border rounded-2xl p-6 shadow-sm hover:border-foreground/20 transition-all">
               <div className="flex items-start gap-4 mb-6">
                 <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center text-xl font-bold shrink-0">
-                  {emp.fullName.charAt(0)}
+                  {emp.fullName?.charAt(0)}
                 </div>
                 <div>
                   <h3 className="font-semibold">{emp.fullName}</h3>
                   <p className="text-xs text-muted-foreground">{emp.email}</p>
+                  {emp.position && <p className="text-xs text-muted-foreground mt-0.5">{emp.position}</p>}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="bg-muted/30 p-3 rounded-xl border border-border/50 text-center">
-                  <p className="text-2xl font-bold">{emp.taskTotal || 0}</p>
+                  <p className="text-2xl font-bold">{emp.totalTasks ?? emp.tasksAssigned ?? 0}</p>
                   <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Total Tasks</p>
                 </div>
                 <div className="bg-muted/30 p-3 rounded-xl border border-border/50 text-center">
-                  <p className={`text-2xl font-bold ${emp.performanceScore >= 80 ? 'text-green-500' : emp.performanceScore >= 50 ? 'text-yellow-500' : 'text-red-500'}`}>
-                    {emp.performanceScore || 0}%
+                  <p className={`text-2xl font-bold ${
+                    (emp.score ?? 0) >= 800 ? 'text-green-500' :
+                    (emp.score ?? 0) >= 600 ? 'text-blue-500' :
+                    (emp.score ?? 0) >= 400 ? 'text-yellow-500' :
+                    (emp.score ?? 0) >= 200 ? 'text-orange-500' : 'text-red-500'
+                  }`}>
+                    {emp.score ?? 0}
                   </p>
-                  <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Completion Avg</p>
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1">Score /1000</p>
                 </div>
+              </div>
+
+              {/* Score label badge */}
+              <div className={`mb-4 text-center text-xs font-semibold py-1 rounded-full ${
+                (emp.score ?? 0) >= 800 ? 'bg-green-500/10 text-green-600' :
+                (emp.score ?? 0) >= 600 ? 'bg-blue-500/10 text-blue-600' :
+                (emp.score ?? 0) >= 400 ? 'bg-yellow-500/10 text-yellow-600' :
+                (emp.score ?? 0) >= 200 ? 'bg-orange-500/10 text-orange-600' : 'bg-red-500/10 text-red-600'
+              }`}>
+                {emp.scoreLabel?.emoji ?? ''} {emp.scoreLabel?.label ?? (emp.score >= 800 ? 'Excellent' : emp.score >= 600 ? 'Good' : emp.score >= 400 ? 'Average' : emp.score >= 200 ? 'Needs Work' : 'Critical')}
               </div>
 
               <button className="w-full py-2.5 rounded-xl border border-border bg-background hover:bg-muted font-medium text-sm transition-colors flex items-center justify-center gap-2">

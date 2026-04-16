@@ -32,8 +32,8 @@ const upload = multer({
 router.use(protect);
 router.use(verifyCompanyScope);
 
-router.get('/', authorize('company_admin'), peopleController.listPeople);
-router.get('/:id', authorize('company_admin'), peopleController.getPersonDetail);
+router.get('/', authorize('company_admin', 'manager'), peopleController.listPeople);
+router.get('/:id', authorize('company_admin', 'manager'), peopleController.getPersonDetail);
 
 router.post(
   '/',

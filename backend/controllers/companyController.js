@@ -5,6 +5,8 @@ const Task = require('../models/Task');
 const Meeting = require('../models/Meeting');
 const ActivityLog = require('../models/ActivityLog');
 const Notification = require('../models/Notification');
+const toObjectId = require('../utils/toObjectId');
+const { calculateEmployeeScore, calculateManagerScore, getScoreLabel } = require('../services/performanceScore.service');
 
 // ━━━ GET OVERVIEW STATS ━━━
 exports.getOverview = async (req, res) => {
@@ -274,6 +276,79 @@ exports.importPeople = async (req, res) => {
     });
   } catch (error) {
     console.error('Import people error:', error);
+    return res.status(500).json({ success: false, message: 'Server error', errors: [] });
+  }
+};
+
+// ━━━ GET COMPANY PERFORMANCE SUMMARY ━━━
+exports.getPerformanceSummary = async (req, res) => {
+  try {
+    const companyId = toObjectId(req.companyId || req.user.company);
+
+    const [managers, employees] = await Promise.all([
+      User.find({ company: companyId, role: 'manager', isActive: { $ne: false } })
+        .select('fullName email position department avatar'),
+      User.find({ company: companyId, role: 'employee', isActive: { $ne: false } })
+        .select('fullName email position department avatar'),
+    ]);
+
+    const [managerScores, employeeScores] = await Promise.all([
+      Promise.all(
+        managers.map(async m => {
+          const { score, breakdown } = await calculateManagerScore(m._id, companyId);
+          return {
+            _id: m._id,
+            fullName: m.fullName,
+            email: m.email,
+            position: m.position,
+            department: m.department,
+            avatar: m.avatar,
+            role: 'manager',
+            score,
+            breakdown,
+            scoreLabel: getScoreLabel(score),
+          };
+        })
+      ),
+      Promise.all(
+        employees.map(async e => {
+          const { score, breakdown } = await calculateEmployeeScore(e._id, companyId);
+          return {
+            _id: e._id,
+            fullName: e.fullName,
+            email: e.email,
+            position: e.position,
+            department: e.department,
+            avatar: e.avatar,
+            role: 'employee',
+            score,
+            breakdown,
+            scoreLabel: getScoreLabel(score),
+          };
+        })
+      ),
+    ]);
+
+    const all = [...managerScores, ...employeeScores].sort((a, b) => b.score - a.score);
+
+    const companyAvgScore =
+      all.length > 0
+        ? Math.round(all.reduce((s, p) => s + p.score, 0) / all.length)
+        : 0;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        managers: managerScores.sort((a, b) => b.score - a.score),
+        employees: employeeScores.sort((a, b) => b.score - a.score),
+        topPerformer: all[0] || null,
+        companyAvgScore,
+        scoreLabel: getScoreLabel(companyAvgScore),
+        total: all.length,
+      },
+    });
+  } catch (error) {
+    console.error('Company performance summary error:', error);
     return res.status(500).json({ success: false, message: 'Server error', errors: [] });
   }
 };

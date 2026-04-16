@@ -7,20 +7,23 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const EmployeePerformance = () => {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState(false);
-  const reportRef = useRef<HTMLDivElement>(null);
+  const [aiReport, setAiReport] = useState<any>(null);
+  const [loadingAi, setLoadingAi] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await employeeAPI.getPerformance();
-        setData(res.data.data);
+        const [perfRes, aiRes] = await Promise.all([
+          employeeAPI.getPerformance(),
+          employeeAPI.getPerformanceAIReport().catch(() => ({ data: { data: { report: 'AI summary currently unavailable.' } } }))
+        ]);
+        setData(perfRes.data.data);
+        setAiReport(aiRes.data?.data?.report || 'AI summary currently unavailable.');
       } catch (e) {
         showToast('Failed to load performance data', 'error');
       } finally {
         setLoading(false);
+        setLoadingAi(false);
       }
     };
     fetchData();
@@ -87,20 +90,24 @@ const EmployeePerformance = () => {
         {/* Top Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="p-4 bg-background rounded-xl border border-border">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Completion Rate</p>
-            <p className="text-2xl font-bold">{data?.completionRate || 0}%</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Overall Score</p>
+            <p className={`text-2xl font-bold ${
+              (data?.score ?? 0) >= 800 ? 'text-green-500' :
+              (data?.score ?? 0) >= 600 ? 'text-blue-500' :
+              (data?.score ?? 0) >= 400 ? 'text-yellow-500' : 'text-red-500'
+            }`}>{data?.score ?? 0}<span className="text-sm text-muted-foreground">/1000</span></p>
           </div>
           <div className="p-4 bg-background rounded-xl border border-border">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Tasks</p>
-            <p className="text-2xl font-bold">{data?.totalTasks || 0}</p>
+            <p className="text-2xl font-bold">{data?.breakdown?.total ?? data?.totalTasks ?? 0}</p>
           </div>
           <div className="p-4 bg-background rounded-xl border border-border">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Tasks Done</p>
-            <p className="text-2xl font-bold">{data?.doneTasks || 0}</p>
+            <p className="text-2xl font-bold">{data?.doneTasks ?? 0}</p>
           </div>
           <div className="p-4 bg-background rounded-xl border border-border">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Active Projects</p>
-            <p className="text-2xl font-bold">Autopiloted</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Overdue</p>
+            <p className="text-2xl font-bold text-red-500">{data?.breakdown?.overdue ?? data?.overdueTasks ?? 0}</p>
           </div>
         </div>
 
@@ -108,13 +115,15 @@ const EmployeePerformance = () => {
         <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-6 mb-8 relative overflow-hidden">
           <Sparkles className="absolute top-4 right-4 w-24 h-24 text-blue-500 opacity-5" />
           <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Sparkles className="w-5 h-5 text-blue-500" /> AI Executive Summary</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {data?.completionRate > 80
-              ? "Exceptional performance this period. You have consistently hit deadlines and maintained a high throughput of task resolution. Your proactive approach to daily reporting indicates strong alignment with project goals. Keep up the excellent work!"
-              : data?.completionRate > 50
-                ? "Solid progress over the recent weeks. Task completion is steady, though there is room for improvement in closing out pending items faster. Focusing on high-priority deadlines will boost overall efficiency."
-                : "We've noticed a slowdown in task completions recently. Please review overdue tasks and communicate any blockers with your manager promptly to re-align on expectations."}
-          </p>
+          {loadingAi ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Generating personalized insight...
+            </div>
+          ) : (
+            <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+              {aiReport}
+            </p>
+          )}
         </div>
 
         {/* 8-Week Bar Chart (CSS Flex) */}

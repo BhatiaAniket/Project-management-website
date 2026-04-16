@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { companyAPI } from '../../api/company';
+import { managerAPI } from '../../api/manager';
 import { useSocket } from '../../context/SocketContext';
 import { showToast } from '../../components/Toast';
 import { AlertCircle, Calendar, Clock, AlignLeft, GripVertical, Loader2, CheckCircle2, User } from 'lucide-react';
@@ -21,8 +21,8 @@ const ManagerTasks = () => {
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await companyAPI.listAllTasks({ limit: 500 });
-      setTasks(res.data.data.tasks || []);
+      const res = await managerAPI.getTasks();
+      setTasks(res.data.data || []);
     } catch (e) {
       console.error(e);
       showToast('Failed to load tasks', 'error');
@@ -39,8 +39,10 @@ const ManagerTasks = () => {
     if (!socket) return;
     const handleUpdate = () => fetchTasks();
     socket.on('task:updated', handleUpdate);
+    socket.on('task:status_updated', handleUpdate);
     return () => {
       socket.off('task:updated', handleUpdate);
+      socket.off('task:status_updated', handleUpdate);
     }
   }, [socket, fetchTasks]);
 
@@ -57,9 +59,7 @@ const ManagerTasks = () => {
     setTasks(prev => prev.map(t => t._id === draggableId ? { ...t, status: newStatus } : t));
 
     try {
-      // In ManagerTasks it calls companyAPI.updateTask(projectId, taskId, payload)
-      // We'll need the project ID from the task
-      await companyAPI.updateTask(task.project._id || task.project, draggableId, { status: newStatus });
+      await managerAPI.updateTask(draggableId, { status: newStatus });
       if (newStatus === 'under_review') {
         showToast('Moved to Under Review. Awaiting employee report.', 'success');
       }

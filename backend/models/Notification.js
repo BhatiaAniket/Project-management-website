@@ -50,7 +50,7 @@ const notificationSchema = new mongoose.Schema(
     },
     relatedModel: {
       type: String,
-      enum: ['Project', 'Task', 'Meeting', 'User', 'Message', null],
+      enum: ['Project', 'Task', 'Meeting', 'User', 'Message', 'DailyReport', null],
       default: null,
     },
   },

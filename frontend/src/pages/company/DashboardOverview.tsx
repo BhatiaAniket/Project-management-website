@@ -72,14 +72,14 @@ const DashboardOverview = () => {
         companyAPI.getPerformanceSummary()
       ]);
 
-      setCompanyName(statsRes.data.companyName);
-      setStats(statsRes.data);
-      setProjectProgress(progressRes.data.data);
-      setTaskStatus(taskStatusRes.data.data);
-      setWeeklyProductivity(productivityRes.data.data);
-      setUpcomingDeadlines(deadlinesRes.data.data);
-      setRecentActivity(activityRes.data.data);
-      setPerformanceSummary(perfRes.data.data);
+      setCompanyName(statsRes.data.data?.companyName || statsRes.data.companyName || '');
+      setStats(statsRes.data.data || statsRes.data);
+      setProjectProgress(progressRes.data.data || []);
+      setTaskStatus(taskStatusRes.data.data || { todo: 0, inProgress: 0, done: 0, overdue: 0 });
+      setWeeklyProductivity(productivityRes.data.data || []);
+      setUpcomingDeadlines(deadlinesRes.data.data || []);
+      setRecentActivity(activityRes.data.data || []);
+      setPerformanceSummary(perfRes.data.data || []);
 
       // Invalidate hover cache if data refreshed from socket
       setHoverData({});
